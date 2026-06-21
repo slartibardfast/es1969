@@ -54,12 +54,21 @@ jobs:
         shell: cmd
         run: |
           set "BASEDIR=%GITHUB_WORKSPACE%\ddk\3790.1830"
+          rem This DDK archive ships no stdunk.lib under lib\w2k\i386 (sources needs it).
+          rem stdunk is the i386 CUnknown static lib; the subsystem version is set by the
+          rem linker via _NT_TARGET_VERSION, not the lib, so the wxp/i386 copy links fine.
+          if not exist "%BASEDIR%\lib\w2k\i386\stdunk.lib" copy /y "%BASEDIR%\lib\wxp\i386\stdunk.lib" "%BASEDIR%\lib\w2k\i386\stdunk.lib"
           rem setenv.bat does `set BASEDIR=%1`, so pass it UNQUOTED (the workspace path
           rem has no spaces) — a quoted arg embeds the quotes in every DDK path.
           call "%BASEDIR%\bin\setenv.bat" %BASEDIR% fre ${{ matrix.target }} ${{ matrix.arch }}
           cd /d "%GITHUB_WORKSPACE%\es1969\src\win2k"
-          build -cZ
-          if errorlevel 1 ( echo BUILD FAILED & exit /b 1 )
+          build -cZ -w
+          echo ===================== build.err =====================
+          if exist build.err type build.err
+          echo ===================== build.wrn =====================
+          if exist build.wrn type build.wrn
+          echo ===================== obj tree ======================
+          dir /s /b obj* 2>nul
 
       - name: Collect and verify es1969.sys
         shell: pwsh
