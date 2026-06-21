@@ -1,0 +1,74 @@
+name: Build driver
+
+# Builds the ES1969 (Solo-1) WDM driver for both target architectures:
+#   * Win32 (x86) — for Windows 2000 / XP 32-bit
+#   * x64        — for Windows XP / Server 2003 x64 and later 64-bit Windows
+# The buildable component is the WDK10 project under src/win2k/vs2019.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [Win32, x64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install the Windows Driver Kit
+        shell: pwsh
+        run: |
+          choco install windowsdriverkit11 --no-progress --yes
+          # The WDK ships a Visual Studio extension that registers the
+          # WindowsKernelModeDriver10.0 toolset for command-line msbuild. Install
+          # whichever VS2022 vsix the WDK dropped, so the Driver project type resolves.
+          $vsix = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\Vsix' -Recurse -Filter '*.vsix' -ErrorAction SilentlyContinue |
+                  Where-Object { $_.FullName -match 'VS2022|2022' } | Select-Object -First 1
+          if (-not $vsix) {
+            $vsix = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\Vsix' -Recurse -Filter '*.vsix' -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if ($vsix) {
+            Write-Host "Installing WDK extension: $($vsix.FullName)"
+            $vsixInstaller = 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\VSIXInstaller.exe'
+            & $vsixInstaller /quiet /admin "$($vsix.FullName)"
+          } else {
+            Write-Host '::warning::No WDK vsix found; the toolset may already be registered.'
+          }
+
+      - name: Build (Release | ${{ matrix.platform }})
+        shell: pwsh
+        run: |
+          msbuild src/win2k/vs2019/es1969/es1969.vcxproj `
+            /m `
+            /p:Configuration=Release `
+            /p:Platform=${{ matrix.platform }} `
+            /p:SpectreMitigation=false `
+            /p:SignMode=Off
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $sys = Get-ChildItem -Recurse -Filter 'es1969.sys' | Select-Object -First 1
+          if (-not $sys) { throw 'es1969.sys not found after build' }
+          Copy-Item $sys.FullName out\
+          $inf = Get-ChildItem -Recurse -Filter 'es1969.inf' | Select-Object -First 1
+          if ($inf) { Copy-Item $inf.FullName out\ }
+          Get-ChildItem out\
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: es1969-${{ matrix.platform }}
+          path: out/
+          if-no-files-found: error
