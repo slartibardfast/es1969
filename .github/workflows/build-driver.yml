@@ -32,10 +32,14 @@ jobs:
             target: W2K
             arch: ""
             subsystem: "5.00"
+            pkg: x86
+            gameport: "no"
           - lane: nt-x64-wnet
             target: WNET
             arch: AMD64
             subsystem: "5.02"
+            pkg: x64
+            gameport: "yes"
 
     steps:
       - name: Checkout es1969
@@ -101,4 +105,56 @@ jobs:
         with:
           name: es1969-${{ matrix.lane }}
           path: out/
+          if-no-files-found: error
+
+      - name: Package distribution zip (${{ matrix.pkg }})
+        shell: pwsh
+        run: |
+          $stage = "pkg"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          $sys = Get-ChildItem -Recurse -Path es1969/src/win2k -Filter es1969.sys | Select-Object -First 1
+          if (-not $sys) { throw "es1969.sys not found for packaging" }
+          Copy-Item $sys.FullName "$stage/"
+          Copy-Item es1969/src/win2k/es1969.inf "$stage/"
+
+          # Unsigned distribution (host call/0003): users enable test-signing.
+          $install = @(
+            "ES1969 (ESS Solo-1) audio driver - ${{ matrix.pkg }}",
+            "",
+            "This driver is UNSIGNED. Install in test-signing mode:",
+            "  1. Elevated Command Prompt:  bcdedit /set testsigning on   (then reboot)",
+            "  2. Device Manager -> the ES1969 audio device (yellow !) -> Update driver",
+            "     -> Browse my computer -> point this folder -> select es1969.inf.",
+            "  3. Accept the 'Windows can't verify the publisher' prompt (Install anyway).",
+            ""
+          )
+          if ("${{ matrix.gameport }}" -eq "yes") {
+            Copy-Item es1969/src/gameport/GameEnum.sys "$stage/"
+            Copy-Item es1969/src/gameport/gameport.inf "$stage/"
+            $install += @(
+              "Gameport / MPU-401 joystick (64-bit only):",
+              "  Install gameport.inf the same way to load GameEnum.sys.",
+              ""
+            )
+            @(
+              "NOTICE - GameEnum.sys",
+              "",
+              "GameEnum.sys is a reconstruction of Microsoft's generic Game Port Enumerator",
+              "(gameenum.sys), rebuilt for 64-bit Windows (which ships no gameport enumerator).",
+              "Its version resource carries Microsoft Corporation's copyright. It is",
+              "redistributed here for convenience and is not an ESS or project original work."
+            ) | Set-Content -Encoding ascii "$stage/NOTICE"
+          }
+          $install | Set-Content -Encoding ascii "$stage/INSTALL.txt"
+
+          $zip = "es1969-${{ matrix.pkg }}.zip"
+          Compress-Archive -Path "$stage/*" -DestinationPath $zip -Force
+          Write-Host "Package $zip contents:"
+          Get-ChildItem $stage | Select-Object Name, Length | Format-Table -AutoSize
+
+      - name: Upload distribution package
+        uses: actions/upload-artifact@v4
+        with:
+          name: es1969-${{ matrix.pkg }}-package
+          path: es1969-${{ matrix.pkg }}.zip
           if-no-files-found: error
