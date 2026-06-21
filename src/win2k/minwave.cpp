@@ -886,11 +886,13 @@ NonDelegatingQueryInterface
     {
         *Object = PVOID(PMINIPORTWAVECYCLICSTREAM(this));
     }
-    else 
+#if !defined(ES_NT_TARGET) || (ES_NT_TARGET >= 0x501)
+    else
     if (IsEqualGUIDAligned (Interface, IID_IDrmAudioStream))
     {
         *Object = (PVOID)(PDRMAUDIOSTREAM(this));
     }
+#endif
     else
     {
         *Object = NULL;
@@ -1203,13 +1205,14 @@ SetState
     return ntStatus;
 }
 
+#if !defined(ES_NT_TARGET) || (ES_NT_TARGET >= 0x501)
 /*****************************************************************************
  * CMiniportWaveStreamSolo::SetContentId
  *****************************************************************************
  * This routine gets called by drmk.sys to pass the content to the driver.
- * The driver has to enforce the rights passed.
+ * The driver has to enforce the rights passed.  IDrmAudioStream is XP+ only.
  */
-STDMETHODIMP_(NTSTATUS) 
+STDMETHODIMP_(NTSTATUS)
 CMiniportWaveStreamSolo::SetContentId
 (
     IN  ULONG       contentId,
@@ -1220,11 +1223,12 @@ CMiniportWaveStreamSolo::SetContentId
 
     PAGED_CODE ();
 
-    Miniport->AdapterCommon->DRM_SetFlags(drmRights->CopyProtect, 
+    Miniport->AdapterCommon->DRM_SetFlags(drmRights->CopyProtect,
         drmRights->DigitalOutputDisable);
-    
+
     return STATUS_SUCCESS;
 }
+#endif
 
 #pragma code_seg()
 

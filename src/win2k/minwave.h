@@ -116,7 +116,9 @@ public:
 class CMiniportWaveStreamSolo
 :   public IMiniportWaveCyclicStream,
     public IDmaChannel,
-    public IDrmAudioStream,
+#if !defined(ES_NT_TARGET) || (ES_NT_TARGET >= 0x501)
+    public IDrmAudioStream,         // DRM audio (drmk.h) is XP+; absent on Win2K
+#endif
     public CUnknown
 {
 private:
@@ -162,12 +164,14 @@ public:
      */
     IMP_IMiniportWaveCyclicStream;
 
+#if !defined(ES_NT_TARGET) || (ES_NT_TARGET >= 0x501)
     /*************************************************************************
-     * Include IDrmAudioStream public/exported methods (drmk.h)
+     * Include IDrmAudioStream public/exported methods (drmk.h) - XP+ only
      *************************************************************************
      */
     IMP_IDrmAudioStream;
-    
+#endif
+
     /*************************************************************************
      * Include IDmaChannel public/exported methods (portcls.h)
      *************************************************************************

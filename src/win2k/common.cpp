@@ -11,6 +11,18 @@
 #include "common.h"
 #include "DRIVER.H"
 
+//
+// IAdapterPowerManagement exists on Windows 2000, but its w2k portcls.h ships the
+// IID and pointer typedef with the historical typo (Microsoft corrected the spelling
+// to ...Management in XP+). Alias the corrected names to the Win2K spelling so the
+// source below stays single-spelled. Only applies to the legacy DDK W2K build
+// (ES_NT_TARGET defined and below XP); the modern vs2019 build is unaffected.
+//
+#if defined(ES_NT_TARGET) && (ES_NT_TARGET < 0x501)
+#define IID_IAdapterPowerManagement IID_IAdapterPowerManagment
+#define PADAPTERPOWERMANAGEMENT     PADAPTERPOWERMANAGMENT
+#endif
+
 #define STR_MODULENAME "es1969Adapter: "
 
 #define FLAG_PNP                0x01
