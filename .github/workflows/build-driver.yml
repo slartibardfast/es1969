@@ -70,10 +70,8 @@ jobs:
           echo ===================== obj tree ======================
           dir /s /b obj* 2>nul
 
-      - name: Collect and verify es1969.sys
+      - name: Collect es1969.sys
         shell: pwsh
-        env:
-          WANT_SUBSYS: ${{ matrix.subsystem }}
         run: |
           $sys = Get-ChildItem -Recurse -Path es1969/src/win2k -Filter es1969.sys -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $sys) {
@@ -86,26 +84,17 @@ jobs:
           Copy-Item $sys.FullName out/
           if (Test-Path es1969/src/win2k/es1969.inf) { Copy-Item es1969/src/win2k/es1969.inf out/ }
 
-          # Best-effort PE subsystem check via the DDK's link.exe. Wrapped so the
-          # job stays green on the artifact; output is redirected to a file to avoid
-          # the pwsh "StandardOutputEncoding" native-pipe error.
-          try {
-            $link = Get-ChildItem -Recurse -Path ddk/3790.1830/bin -Filter link.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($link) {
-              & $link.FullName -dump -headers $sys.FullName > headers.txt 2>&1
-              $hdr = Get-Content headers.txt
-              ($hdr | Select-String -Pattern 'subsystem version|operating system version') | ForEach-Object { Write-Host ("  " + $_.Line.Trim()) }
-              if ($hdr -match "$($env:WANT_SUBSYS) subsystem version") {
-                Write-Host "PE subsystem version is $($env:WANT_SUBSYS) as required."
-              } else {
-                Write-Host "::warning::expected subsystem version $($env:WANT_SUBSYS); see headers above."
-              }
-            } else {
-              Write-Host "::warning::DDK link.exe not found; skipped subsystem verification."
-            }
-          } catch {
-            Write-Host "::warning::PE subsystem verification skipped: $($_.Exception.Message)"
-          }
+      - name: Verify PE subsystem version (Win2K RTM load condition)
+        shell: cmd
+        env:
+          WANT_SUBSYS: ${{ matrix.subsystem }}
+        run: |
+          for /f "delims=" %%L in ('dir /s /b "%GITHUB_WORKSPACE%\es1969\src\win2k\es1969.sys"') do set "SYS=%%L"
+          for /f "delims=" %%K in ('dir /s /b "%GITHUB_WORKSPACE%\ddk\3790.1830\bin\link.exe"') do set "LINK=%%K"
+          "%LINK%" -dump -headers "%SYS%" > headers.txt
+          echo --- PE version fields ---
+          findstr /i "subsystem version operating system version image version" headers.txt
+          findstr /i /c:"%WANT_SUBSYS% subsystem version" headers.txt >nul && (echo OK: subsystem %WANT_SUBSYS% as required) || (echo ::warning::expected subsystem version %WANT_SUBSYS%)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
