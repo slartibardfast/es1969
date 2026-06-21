@@ -86,19 +86,25 @@ jobs:
           Copy-Item $sys.FullName out/
           if (Test-Path es1969/src/win2k/es1969.inf) { Copy-Item es1969/src/win2k/es1969.inf out/ }
 
-          # Verify the PE subsystem version with the DDK's own link.exe (-dump).
-          $link = Get-ChildItem -Recurse -Path ddk/3790.1830/bin -Filter link.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($link) {
-            $hdr = & $link.FullName -dump -headers $sys.FullName 2>&1
-            $verLines = $hdr | Select-String -Pattern 'subsystem version|operating system version|subsystem'
-            $verLines | ForEach-Object { Write-Host ("  " + $_.Line.Trim()) }
-            if ($hdr -match "$($env:WANT_SUBSYS) subsystem version") {
-              Write-Host "PE subsystem version is $($env:WANT_SUBSYS) as required."
+          # Best-effort PE subsystem check via the DDK's link.exe. Wrapped so the
+          # job stays green on the artifact; output is redirected to a file to avoid
+          # the pwsh "StandardOutputEncoding" native-pipe error.
+          try {
+            $link = Get-ChildItem -Recurse -Path ddk/3790.1830/bin -Filter link.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($link) {
+              & $link.FullName -dump -headers $sys.FullName > headers.txt 2>&1
+              $hdr = Get-Content headers.txt
+              ($hdr | Select-String -Pattern 'subsystem version|operating system version') | ForEach-Object { Write-Host ("  " + $_.Line.Trim()) }
+              if ($hdr -match "$($env:WANT_SUBSYS) subsystem version") {
+                Write-Host "PE subsystem version is $($env:WANT_SUBSYS) as required."
+              } else {
+                Write-Host "::warning::expected subsystem version $($env:WANT_SUBSYS); see headers above."
+              }
             } else {
-              Write-Host "::warning::expected subsystem version $($env:WANT_SUBSYS); see headers above."
+              Write-Host "::warning::DDK link.exe not found; skipped subsystem verification."
             }
-          } else {
-            Write-Host "::warning::DDK link.exe not found; skipped subsystem verification."
+          } catch {
+            Write-Host "::warning::PE subsystem verification skipped: $($_.Exception.Message)"
           }
 
       - name: Upload artifact

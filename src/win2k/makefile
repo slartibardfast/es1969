@@ -13,7 +13,7 @@
 # that is shared by all the components of NT.
 #
 !IF DEFINED(_NT_TARGET_VERSION)
-!	IF $(_NT_TARGET_VERSION)>=0x501
+!	IF $(_NT_TARGET_VERSION)>=0x500
 !		INCLUDE $(NTMAKEENV)\makefile.def
 !	ELSE
 #               Only warn once per directory
